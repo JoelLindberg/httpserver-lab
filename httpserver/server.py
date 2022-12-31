@@ -20,6 +20,7 @@ async def handleConnection(reader: asyncio.StreamReader, writer: asyncio.StreamW
     print("closing - good bye")
     writer.close()
 
+
 async def main():
     server = await asyncio.start_server(handleConnection, '127.0.0.1', 5000)
 

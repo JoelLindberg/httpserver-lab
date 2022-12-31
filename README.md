@@ -20,6 +20,8 @@ Tasks:
    - Respond only to the absolut minimum amount of request and header information. Just enough for the browser to be satisfied when browsing the url.
  - [ ] Serve a standard "GET / HTTP/1.1" request from Firefox and Chrome
 
+![Flowdiagram](https://github.com/joellindberg/httpserver-lab/raw/master/diagrams/httpserver-lab.png)
+
 <br />
 <br />
 
