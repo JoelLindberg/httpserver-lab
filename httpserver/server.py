@@ -3,19 +3,19 @@ import asyncio
 import handle_http
 
 
-async def handleConnection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def handleConnection(reader: asyncio.StreamReader,
+                           writer: asyncio.StreamWriter):
     while True:
         data = await reader.read(1024)
         if len(data) == 0:
             break
         message = data.decode()
         addr = writer.get_extra_info('peername')
-        print(f"Received {message!r} from {addr!r}")
+        print(f'Received {message!r} from {addr!r}')
 
         response = handle_http.handle_request(message)
-        
-        print(f"Send: {response}")
-        writer.write(response.encode(encoding='utf-8'))
+        writer.write(response)
+        print(f'Sent {response}')
         await writer.drain()
     print("closing - good bye")
     writer.close()

@@ -1,4 +1,4 @@
-# HTTP Server #
+# HTTP Server
 
 **What:** A study of HTTP/1.1 by implementing it as a simple server
 
@@ -6,28 +6,29 @@
 
 **Why and how:** Experiment to learn more about the transport (tcp) and application protocols (http) as it's so widely used today (and growing). I decided to approach this with a reverse engineering mindset while also looking at any protocol documentation that can be found. Using tools such as netcat/telnet, network trace (tcpdump/wireshark) and my own custom tcp client to create dummy requests during development leading up to the final goal.
 
-* Learn more about the TCP/IP stack
 * Learn about the HTTP protocol by implementing a simple HTTP server
 * Learn about concurrency (processes, threads, async)
   - Learn about basic differences to be able to pick the most suitable alternative for my case
+* Learn more about the TCP/IP stack
 
 Tasks:
  - [x] TCP server
  - [x] Handle connections concurrently
    - Persistence in each connection is expected by HTTP/1.1
- - [ ] HTTP/1.1 responses
+ - [ ] Serve a default "GET / HTTP/1.1" request from Firefox and Chrome
    - Make sure to add appropriate header information for the connection to persist until the client is satisfied.
    - Respond only to the absolut minimum amount of request and header information. Just enough for the browser to be satisfied when browsing the url.
- - [ ] Serve a standard "GET / HTTP/1.1" request from Firefox and Chrome
 
 ![Flow](https://github.com/joellindberg/httpserver-lab/raw/main/diagrams/httpserver-lab.png)
 
 <br />
 <br />
 
-## HTTP/1.1 ##
+## HTTP/1.1
 
-### TCP server ###
+<br />
+
+### TCP server
 
 Requirements for the **TCP server** to fulfil in order to successfully serve a HTTP/1.1 request.
 
@@ -48,7 +49,7 @@ Set a TCP timeout to ensure the resource is released if something goes wrong.<br
 
 <br />
 
-### HTTP server/handler ###
+### HTTP server/handler
 
 * Line feed:
   - Follow RFCs 2616 and the newer 7230 regarding line feed
@@ -73,8 +74,9 @@ Notes to myself, but not certain it is required. Test again:
 Needed to add this for the client to know that it has received all the requested data. The client should then proceed with sending a FIN/ACK to terminate the connection (firefox does this for example). Without this the connection stays alive.
 
 <br />
+<br />
 
-## Testing ##
+## Testing
 
 ~~~console
 python3 -m pytest tests
@@ -85,22 +87,33 @@ Create junitxml report when adding tests to git actions?
 python3 -m pytest tests --junitxml=junit/test-results.xml
 ~~~
 
-## Conclusions (notes to myself mostly) ##
+<br />
+<br />
+
+## Conclusions (notes to myself mostly)
 
 HTTP/3 might be worth looking at later. It seems to be a promising successor to HTTP/1.1. Will probably skip any deep dives in HTTP/2 as I have not yet encountered any real cases for it yet (except for seeing some bigger sites using it). HTTP/3 is also multiplexed but with the difference from its predecessors that it's using a new protocol named QUIC which operates on top of UDP.
 
 <br />
 <br />
 
-## Resources ##
+## Resources
 
 TCP
 
 Python asyncio
 * https://docs.python.org/3/library/asyncio-stream.html
 
-Python3 sockets
+Python sockets
 * https://docs.python.org/3/library/socket.html
+
+Python linting
+* https://flake8.pycqa.org/en/latest/
+
+Github actions
+* https://docs.github.com/en/actions/examples/using-scripts-to-test-your-code-on-a-runner
+* https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+* https://github.com/actions/runner-images
 
 HTTP
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x
@@ -140,21 +153,25 @@ tcpdump
 
 Temporary notes that will be organized or removed as work progress.
 
+<br />
+
 ### tcpdump
 
-Capture network traffic and display the data part in ascii.
+Capture network traffic and display the data part in ASCII.
 ~~~bash
-sudo tcpdump -ni lo port 9000 -A
+sudo tcpdump -ni lo port 5000 -A
+~~~
+
+It's also useful to analyze the data in HEX for each packet for troubleshooting the important line separation format. This also shows the data in ASCII.
+
+~~~bash
+sudo tcpdump -ni lo port 5000 -XX
 ~~~
 
 TCP flags:
 > Tcpflags are some combination of S (SYN), F (FIN), P (PUSH), R (RST), U (URG), W (ECN CWR), E (ECN-Echo) or `.' (ACK), or `none' if no flags are set.
 
-Hex output to debug for example what line ending characters you have received. I used this to verify why I received 2 bytes I knew I only had sent 1 character using netcat. The second byte was simply the line feed as expected from a Linux client.
-
-~~~console
-$ sudo tcpdump -nni lo port 8000 -XX
-~~~
+<br />
 
 ### curl
 
