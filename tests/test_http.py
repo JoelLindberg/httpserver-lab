@@ -1,4 +1,5 @@
 import unittest
+
 from httpserver import handle_http
 
 
@@ -11,21 +12,22 @@ class TestHandleHttpDataTypes(unittest.TestCase):
 class TestHandleHttpMethods(unittest.TestCase):
     def setUp(self):    
         self.httpdata = handle_http.HttpData(
-            request = handle_http.Request(
-                requesttype = handle_http.RequestType(
-                    method = '',
-                    resource = '',
-                    version = ''
+            request=handle_http.Request(
+                requesttype=handle_http.RequestType(
+                    method='',
+                    resource='',
+                    version=''
                 ),
-                headers = {},
-                body = ''
+                headers={},
+                body=''
             ),
-            response = handle_http.Response(
-                headers = {},
-                body= '',
-                status_code = 200
+            response=handle_http.Response(
+                headers={},
+                body='',
+                image=b'',
+                status_code=200
             ),
-            message = handle_http.Message(
+            message=handle_http.Message(
                 request='',
                 headers=[],
                 body=''
@@ -36,14 +38,37 @@ class TestHandleHttpMethods(unittest.TestCase):
     def test_split_request(self):
         httpdata = self.httpdata
         httpdata['message']['request'] = 'GET / HTTP/1.1'
-        
+
         handle_http.split_request(httpdata)
         self.assertEqual(httpdata['request']['requesttype'],
                          {'method': 'GET', 'resource': '/', 'version': 'HTTP/1.1'})
 
 
+    def test_split_request_favicon(self):
+        # arrange
+        self.httpdata['message']['request'] = 'GET /favicon.png HTTP/1.1'
+        
+        # act
+        handle_http.split_request(self.httpdata)
+        
+        # assert
+        compare = {'method': 'GET', 'resource': '/favicon.png', 'version': 'HTTP/1.1'}
+        self.assertEqual(self.httpdata['request']['requesttype'], compare)
+
+
     def test_split_headers(self):
-        self.assertEqual('s', 's')
+        # arrange
+        self.httpdata['message']['headers'] = ['Connection: keep-alive\r\n', 'Accept: text/html\r\n']
+
+        # act
+        handle_http.split_headers(self.httpdata)
+
+        # assert
+        control = {
+            'connection': 'keep-alive',
+            'accept': 'text/html'
+        }
+        self.assertEqual(self.httpdata['request']['headers'], control)
 
 
     def test_split_message_all(self):
