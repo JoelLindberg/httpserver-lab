@@ -1,43 +1,36 @@
+from dataclasses import dataclass
+from dataclasses import field
 import re
 import typing
 import pprint  # for debugging ... add logging (with stdout as option)?
+import logging
 
 
-class RequestType(typing.TypedDict):
-    """Request method type"""
-    method: str
-    resource: str
-    version: str
-
-
-class Request(typing.TypedDict):
+@dataclass
+class Request():
     """Sorted and Verified client request data, ready for processing"""
-    requesttype: RequestType
-    headers: typing.Dict[str, str]
-    body: str
+    request_method: str = field(default="")
+    request_resource: str = field(default="")
+    request_version: str = field(default="")
+    headers: typing.Dict[str, str] = field(default_factory=dict)
+    body: str = field(default="")
 
 
-class Response(typing.TypedDict):
+@dataclass
+class Response():
     """Server response data, to assemble the response text message from"""
-    headers: typing.Dict[str, str]
-    body: str
-    image: bytes
-    status_code: int
+    headers: typing.Dict[str, str] = field(default_factory=dict)
+    body: str = field(default="")
+    image: bytes = field(default_factory=bytes)
+    status_code: int = field(default=0)
 
 
-class Message(typing.TypedDict):
+@dataclass
+class MessageTmp():
     """Temporary message store while processing and verifying it"""
-    request: str
-    headers: typing.List[str]
-    body: str
-
-
-class HttpData(typing.TypedDict):
-    """Main data entry that will be referenced from receiving the message
-    up until delivery"""
-    request: Request
-    response: Response
-    message: Message
+    request: str = field(default="")
+    headers: typing.List[str] = field(default_factory=list)
+    body: str = field(default="")
 
 
 def update_status_code():
@@ -49,78 +42,81 @@ def update_status_code():
     pass
 
 
-def router(httpdata: HttpData):
+def load_response_data(request: Request, response: Response):
+    """Load response data for the requested resource."""
     # we should have a function that is responsible for checking what resource
     # is requested
-    if httpdata['request']['requesttype']['resource'] == '/':
-        load_html('index.html', httpdata)
-        create_response_headers('html', httpdata)
-    elif httpdata['request']['requesttype']['resource'] == '/favicon.png':
-        load_favicon('favicon.png', httpdata)
-        create_response_headers('png', httpdata)
+    if request.request_resource == '/':
+        response.body = load_html('index.html')
+        response.headers = create_response_headers('html', len(response.body))
+    elif request.request_resource == '/favicon.png':
+        response.image = load_favicon('favicon.png')
+        response.headers = create_response_headers('png', len(response.image))
 
 
-def load_html(filepath: str, httpdata: HttpData):
+def load_html(filepath: str):
     with open(filepath, 'r') as f:
-        httpdata['response']['body'] = f.read()
+        return f.read()
 
 
-def load_favicon(filepath: str, httpdata: HttpData):
+def load_favicon(filepath: str):
     with open(filepath, 'rb') as f:
-        httpdata['response']['image'] = f.read()
+        return f.read()
 
 
-def create_response_headers(type: str, httpdata: HttpData):
+def create_response_headers(type: str, content_length: int) -> dict:
     if type == 'html':
-        body_length = str(len(httpdata['response']['body']))
-        httpdata['response']['headers'] = {
+        body_length = str(content_length)
+        return {
             'content-type': 'text/html;charset=utf-8',
             'content-length': body_length
         }
     elif type == 'png':
-        image_length = str(len(httpdata['response']['image']))
-        httpdata['response']['headers'] = {
+        image_length = str(content_length)
+        return {
             'content-type': 'image/png',
             'content-length': image_length
         }
 
 
-def create_response(httpdata: HttpData) -> bytes:
+def create_response(response: Response) -> bytes:
     """Create the response and return it as a string ready to be delivered
     to the client."""
 
+    response_msg = ""
+
     # Response status
-    status = httpdata['response']['status_code']
-    if status != 200:
-        response = f'HTTP/1.1 {status}\r\n'
+    if response.status_code != 200:
+        response_msg = f'HTTP/1.1 {response.status_code}\r\n'
     else:
-        response = f'HTTP/1.1 {status} OK\r\n'
+        response_msg = f'HTTP/1.1 {response.status_code} OK\r\n'
 
     # Headers
-    for k, v in httpdata['response']['headers'].items():
-        response += f'{k}: {v}\r\n'
+    print(response.headers)
+    for k, v in response.headers.items():
+        response_msg += f'{k}: {v}\r\n'
 
     # Body
-    response += '\r\n'
-    if httpdata['response']['body'] != '':
-        response += f'{httpdata["response"]["body"]}\r\n'
+    response_msg += '\r\n'
+    if response.body != '':
+        response_msg += f'{response.body}\r\n'
 
     # debug
-    print(f'HttpData before sending response: {httpdata}')
+    print(f'HttpData before sending response: {response}')
     pp = pprint.PrettyPrinter(indent=4)
-    pp.pprint(httpdata)
-    print(f'Response message: {response}')
+    pp.pprint(response_msg)
+    print(f'Response message: {response_msg}')
 
     # Convert response to bytes object to be sent to the client over the wire.
     # If image is to be returned, this is appended where the body would
     # normally sit.
-    if httpdata['response']['image'] != b'':
-        response_ba = bytearray(response, encoding='utf-8')
-        for b in httpdata['response']['image']:
+    if response.image != b'':
+        response_ba = bytearray(response_msg, encoding='utf-8')
+        for b in response.image:
             response_ba.append(b)
         response_b = bytes(response_ba)
     else:
-        response_b = bytes(response, encoding='utf-8')
+        response_b = bytes(response_msg, encoding='utf-8')
 
     return response_b
 
@@ -131,7 +127,7 @@ def verify_data(pattern: str, data: str) -> bool:
     returns a bool."""
 
     matched = re.match(pattern, data)
-    print(f'Regex result: {matched}')
+    logging.debug(f"Regex result: {matched}")
 
     if matched is not None:
         return True
@@ -139,116 +135,99 @@ def verify_data(pattern: str, data: str) -> bool:
         return False
 
 
-def split_request(httpdata: HttpData):
+def split_request(message_tmp: MessageTmp, request: Request):
     """Split the request. Fetches request message from HttpData.
     : For example 'GET / HTTP/1.1' -> <method> <resource> <version>"""
 
     pattern = '^(GET|POST){1} /([a-zA-Z0-9-.]+/?)* (HTTP/1.1){1}?'
 
-    print(f'message before split request: {httpdata["message"]["request"]}')
-    if verify_data(pattern, httpdata['message']['request']):
-        requestsplit = httpdata['message']['request'].split(' ')
+    print(f'message before split request: {message_tmp.request}')
+    if verify_data(pattern, message_tmp.request):
+        requestsplit = message_tmp.request.split(' ')
 
-        httpdata['request']['requesttype']['method'] = requestsplit[0]
-        httpdata['request']['requesttype']['resource'] = requestsplit[1]
-        httpdata['request']['requesttype']['version'] = requestsplit[2]
+        #request = Request()
+        request.request_method = requestsplit[0]
+        request.request_resource = requestsplit[1]
+        request.request_version = requestsplit[2]
+
+        logging.debug(f"Split request: {request}")
+
+        #return request
 
 
-def split_headers(httpdata: HttpData):
+def split_headers(message_tmp: MessageTmp, request: Request):
     """Split headers from the temporary ['message']['headers'] store and
     insert them sorted into ['request']['headers']."""
-    for header in httpdata['message']['headers']:
+    for header in message_tmp.headers:
         h = header.split(':')
         kv = {
             h[0].strip().lower(): h[1].strip().lower()
         }
-        httpdata['request']['headers'].update(kv)
-        print(httpdata['request']['headers'])
+        request.headers.update(kv)
+        
+        logging.debug(f"Split headers: {request.headers}")
 
 
-def split_message(message: str, httpdata: HttpData):
+def split_message(message: str) -> MessageTmp:
     """Split the received message in to 3 (expected) parts as a list:
     : 0 = Request
     : 1 = Headers
-    : 2 = Body
-    : No validation of the message content is done by this method."""
+    : 2 = Body"""
 
-    request = ''
-    headers = []
-    body = ''
+    pattern = '^(.*\\r\\n)+'
+    if not verify_data(pattern, message):
+        logging.debug(f"Error: invalid (raw) message received")  # create error http response
+        return
 
-    # Get line with request method, resource and version.
-    # Expected to be the first line.
-    m1 = message.split('\r\n', 1)
-    print(f'm1: {m1}')
-    request = m1[0]
+    message_split = MessageTmp()
 
-    # Is there more than the request in the header?
-    if len(m1) == 2:
-        # Don't proceed if the second index is empty
-        if m1[1] != '':
-            # Is there a body in the header?
-            m2 = m1[1].rsplit('\r\n\r\n')
-            print(f'm2: {m2}')
-            if len(m2) == 2:
-                print(f'm2: {m2}')
-                body = m2[-1].strip()
+    # GET / HTTP/1.1\r\n
+    # Connection: keep-alive\r\n
+    # Accept: text/html\r\n
+    # \r\n
+    # BODY GOES HERE...\r\n
+    m_split = message.split('\r\n')
+    # [GET, Connection, Accept, '', BODY, '']
+    print(m_split)
+    message_split.request = m_split.pop(0)
+    print(message_split.request)
 
-                # Are there headers as well?
-                m3 = m2[0].split('\r\n')
-                if m3[-1] == '':
-                    m3.pop()
-                print(f'm3a: {m3}')
-                headers = m3
-            else:
-                # If no body was found, expect the rest to be headers only
-                m3 = m2[0].split('\r\n')
-                if m3[-1] == '':
-                    m3.pop()
-                print(f'm3b: {m3}')
-                headers = m3
+    body_found = 0
+    for h in m_split:
+        if h == '':
+            # assume the next item is the body (and the last)
+            body_found = 1
+            print(h)
+            continue
+        if body_found == 1:
+            message_split.body = h
+            print(h)
+            break
+        message_split.headers.append(h)
+        print(h)
 
-    httpdata['message']['request'] = request
-    httpdata['message']['headers'] = headers
-    httpdata['message']['body'] = body
+    print(message_split)
+    logging.debug(f"Split message: {message_split}")
 
-    print(httpdata['message'])
+    return message_split
 
 
 def handle_request(message: str) -> bytes:
     """Process the client request and create the response."""
-    httpdata = HttpData(
-        request=Request(
-            requesttype=RequestType(
-                method='',
-                resource='',
-                version=''
-            ),
-            headers={},
-            body=''
-        ),
-        response=Response(
-            headers={},
-            body='',
-            image=b'',
-            status_code=200
-        ),
-        message=Message(
-            request='',
-            headers=[],
-            body=''
-        )
-    )
-
     # read the request sent by the client
-    split_message(message, httpdata)
-    split_request(httpdata)
-    split_headers(httpdata)
+    message_tmp = split_message(message)
+    request = Request()
+    split_request(message_tmp, request)
+    split_headers(message_tmp, request)
 
+    response = Response()
     # create the response data based on the request received
-    router(httpdata)
+    load_response_data(request, response)
+    logging.debug(f"Response data: {response}")
+    #response("/", request, response)
+    #response("/favicon", request, response)
 
-    # create the response string to send to the client
-    response = create_response(httpdata)
+    # create the response message (a byte encoded string) to send to the client
+    response_message = create_response(response)
 
-    return response
+    return response_message

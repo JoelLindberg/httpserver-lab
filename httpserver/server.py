@@ -1,7 +1,11 @@
+import sys
 import asyncio
+import logging
 
 import handle_http
 
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG, stream=sys.stdout)
 
 async def handleConnection(reader: asyncio.StreamReader,
                            writer: asyncio.StreamWriter):
