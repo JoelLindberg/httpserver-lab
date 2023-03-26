@@ -11,15 +11,32 @@
   - Learn about basic differences to be able to pick the most suitable alternative for my case
 * Learn more about the TCP/IP stack
 
-Tasks:
+Features to implement:
  - [x] TCP server
  - [x] Handle connections concurrently
    - Persistence in each connection is expected by HTTP/1.1
- - [ ] Serve a default "GET / HTTP/1.1" request from Firefox and Chrome
+ - [x] Serve a default "GET / HTTP/1.1" request from Firefox and Chrome
    - Make sure to add appropriate header information for the connection to persist until the client is satisfied.
    - Respond only to the absolut minimum amount of request and header information. Just enough for the browser to be satisfied when browsing the url.
 
 ![Flow](https://github.com/joellindberg/httpserver-lab/raw/main/diagrams/httpserver-lab.png)
+
+<br />
+<br />
+
+## Usage
+
+The server listens on port 4000 by default. It has only been tested in WSL2 (Ubuntu 22.04.2) on Windows.
+
+~~~console
+$ python server.py
+~~~
+
+Cli args for custom port and debug.
+
+~~~console
+$ python server.py -h
+~~~
 
 <br />
 <br />
@@ -62,29 +79,18 @@ Set a TCP timeout to ensure the resource is released if something goes wrong.<br
 ~~~html
 <head><link rel=\"icon\" sizes=\"16x16\" type=\"image/png\" href=\"favicon.png\"></head>
 ~~~
-* 
-
-Persistence:
+* Persistence:
 In HTTP/1.0 a "Connection: Keep-alive" header needs to be sent by the client if it wants to persist the connection. Firefox is sending "Connection: keep-alive" which means that it wants to process more than one request/response pair in the same connection. Since we only serve HTTP/1.1 which implicity use persistence we don't need to act on this. We should still listen for "Connection: close" in the header though as this would indicate to stop the persistent mode for this connection and close the connection.
-
-Is the "Date" header required?
-Date: Sat, 13 Aug 2022 09:02:26 GMT
-
-Notes to myself, but not certain it is required. Test again:
-Needed to add this for the client to know that it has received all the requested data. The client should then proceed with sending a FIN/ACK to terminate the connection (firefox does this for example). Without this the connection stays alive.
 
 <br />
 <br />
 
 ## Testing
 
-~~~console
-python3 -m pytest tests
-~~~
+Test workflow is configured on Github. To manually run:
 
-Create junitxml report when adding tests to git actions?
 ~~~console
-python3 -m pytest tests --junitxml=junit/test-results.xml
+$ python3 -m pytest tests
 ~~~
 
 <br />
@@ -109,6 +115,11 @@ Python sockets
 
 Python linting
 * https://flake8.pycqa.org/en/latest/
+
+Python timezone
+* https://stackoverflow.com/questions/4530069/how-do-i-get-a-value-of-datetime-today-in-python-that-is-timezone-aware
+* https://docs.python.org/3/library/zoneinfo.html
+* https://adamj.eu/tech/2021/05/06/how-to-list-all-timezones-in-python/
 
 Github actions
 * https://docs.github.com/en/actions/examples/using-scripts-to-test-your-code-on-a-runner
