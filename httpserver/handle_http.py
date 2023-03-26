@@ -1,126 +1,140 @@
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import re
 import typing
-import pprint  # for debugging ... add logging (with stdout as option)?
+import pprint
+import logging
 
 
-class RequestType(typing.TypedDict):
-    """Request method type"""
-    method: str
-    resource: str
-    version: str
-
-
-class Request(typing.TypedDict):
+@dataclass
+class Request():
     """Sorted and Verified client request data, ready for processing"""
-    requesttype: RequestType
-    headers: typing.Dict[str, str]
-    body: str
+    request_method: str = field(default="")
+    request_resource: str = field(default="")
+    request_version: str = field(default="")
+    headers: typing.Dict[str, str] = field(default_factory=dict)
+    body: str = field(default="")
 
 
-class Response(typing.TypedDict):
+@dataclass
+class Response():
     """Server response data, to assemble the response text message from"""
-    headers: typing.Dict[str, str]
-    body: str
-    image: bytes
     status_code: int
+    headers: typing.Dict[str, str] = field(default_factory=dict)
+    body: str = field(default="")
+    image: bytes = field(default_factory=bytes)
 
 
-class Message(typing.TypedDict):
+@dataclass
+class MessageTmp():
     """Temporary message store while processing and verifying it"""
-    request: str
-    headers: typing.List[str]
-    body: str
+    request: str = field(default="")
+    headers: typing.List[str] = field(default_factory=list)
+    body: str = field(default="")
+    error_code: int = field(default=0)
 
 
-class HttpData(typing.TypedDict):
-    """Main data entry that will be referenced from receiving the message
-    up until delivery"""
-    request: Request
-    response: Response
-    message: Message
-
-
-def update_status_code():
-    # create logic that will stop processing the request
-    # and send a reply to the client with the error immediately
-    # 200 OK
-    # 400 Bad Request
-    # 404 Not Found
-    pass
-
-
-def router(httpdata: HttpData):
+def load_response_data(request: Request, response: Response):
+    """Load response data for the requested resource."""
     # we should have a function that is responsible for checking what resource
     # is requested
-    if httpdata['request']['requesttype']['resource'] == '/':
-        load_html('index.html', httpdata)
-        create_response_headers('html', httpdata)
-    elif httpdata['request']['requesttype']['resource'] == '/favicon.png':
-        load_favicon('favicon.png', httpdata)
-        create_response_headers('png', httpdata)
+    if response.status_code != 0:
+        logging.debug("load_response_data() -> error code is set - skipping")
+        return
+
+    if request.request_resource == '/':
+        response.body = load_html('index.html')
+        response.headers = create_response_headers('html', len(response.body))
+    elif request.request_resource == '/favicon.png':
+        response.image = load_favicon('favicon.png')
+        response.headers = create_response_headers('png', len(response.image))
+    else:
+        response.status_code = 404
+        logging.debug("load_response_data() -> 404 - (resource) not found")
+        return
+
+    logging.debug(f"load_response_data() -> response data created: {response}")
 
 
-def load_html(filepath: str, httpdata: HttpData):
+def load_html(filepath: str):
     with open(filepath, 'r') as f:
-        httpdata['response']['body'] = f.read()
+        return f.read()
 
 
-def load_favicon(filepath: str, httpdata: HttpData):
+def load_favicon(filepath: str):
     with open(filepath, 'rb') as f:
-        httpdata['response']['image'] = f.read()
+        return f.read()
 
 
-def create_response_headers(type: str, httpdata: HttpData):
-    if type == 'html':
-        body_length = str(len(httpdata['response']['body']))
-        httpdata['response']['headers'] = {
-            'content-type': 'text/html;charset=utf-8',
-            'content-length': body_length
+def create_response_headers(type: str, content_length: int) -> dict:
+    # Date header example = Date: Sat, 13 Aug 2022 09:02:26 GMT
+    datenow = datetime.now(ZoneInfo("Europe/Stockholm"))
+    date = datenow.strftime("%a, %d %b %Y %H:%M:%S %Z")
+
+    if type == "html":
+        body_length = str(content_length)
+        return {
+            "content-type": "text/html;charset=utf-8",
+            "content-length": body_length,
+            "Date": date
         }
-    elif type == 'png':
-        image_length = str(len(httpdata['response']['image']))
-        httpdata['response']['headers'] = {
-            'content-type': 'image/png',
-            'content-length': image_length
+    elif type == "png":
+        image_length = str(content_length)
+        return {
+            "content-type": "image/png",
+            "content-length": image_length,
+            "Date": date
         }
 
 
-def create_response(httpdata: HttpData) -> bytes:
+def error_message(status_code: int):
+    if status_code == 400:
+        return "400 Bad Request"
+    elif status_code == 404:
+        return "404 Not Found"
+
+
+def create_response(response: Response) -> bytes:
     """Create the response and return it as a string ready to be delivered
     to the client."""
+    response_msg = ""
 
     # Response status
-    status = httpdata['response']['status_code']
-    if status != 200:
-        response = f'HTTP/1.1 {status}\r\n'
+    if response.status_code != 0:
+        response_msg = f"HTTP/1.1 {error_message(response.status_code)}\r\n"
+        return bytes(response_msg, encoding='utf-8')
     else:
-        response = f'HTTP/1.1 {status} OK\r\n'
+        response_msg = "HTTP/1.1 200 OK\r\n"
 
     # Headers
-    for k, v in httpdata['response']['headers'].items():
-        response += f'{k}: {v}\r\n'
+    logging.debug(f"create_response() -> response.headers: {response.headers}")
+    for k, v in response.headers.items():
+        response_msg += f'{k}: {v}\r\n'
 
     # Body
-    response += '\r\n'
-    if httpdata['response']['body'] != '':
-        response += f'{httpdata["response"]["body"]}\r\n'
+    response_msg += '\r\n'
+    if response.body != '':
+        response_msg += f'{response.body}\r\n'
 
-    # debug
-    print(f'HttpData before sending response: {httpdata}')
-    pp = pprint.PrettyPrinter(indent=4)
-    pp.pprint(httpdata)
-    print(f'Response message: {response}')
+    # debug response (\r\n)
+    pp = pprint.PrettyPrinter()
+    logging.debug(f"create_response() -> response_msg raw:\n\
+                  {repr(response_msg)}")
+    logging.debug(f"create_response() -> response_msg semi-formatted:\n\
+                  {pp.pformat(response_msg)}")
 
     # Convert response to bytes object to be sent to the client over the wire.
     # If image is to be returned, this is appended where the body would
     # normally sit.
-    if httpdata['response']['image'] != b'':
-        response_ba = bytearray(response, encoding='utf-8')
-        for b in httpdata['response']['image']:
+    if response.image != b'':
+        response_ba = bytearray(response_msg, encoding='utf-8')
+        for b in response.image:
             response_ba.append(b)
         response_b = bytes(response_ba)
     else:
-        response_b = bytes(response, encoding='utf-8')
+        response_b = bytes(response_msg, encoding='utf-8')
 
     return response_b
 
@@ -131,7 +145,8 @@ def verify_data(pattern: str, data: str) -> bool:
     returns a bool."""
 
     matched = re.match(pattern, data)
-    print(f'Regex result: {matched}')
+    if matched is not None:
+        logging.debug(f"verify_data() regex match: {matched.groups()}")
 
     if matched is not None:
         return True
@@ -139,116 +154,98 @@ def verify_data(pattern: str, data: str) -> bool:
         return False
 
 
-def split_request(httpdata: HttpData):
+def split_request(message_tmp: MessageTmp, request: Request):
     """Split the request. Fetches request message from HttpData.
     : For example 'GET / HTTP/1.1' -> <method> <resource> <version>"""
+    if message_tmp.error_code != 0:
+        logging.debug("split_request() -> error code is set - skipping")
+        return
 
     pattern = '^(GET|POST){1} /([a-zA-Z0-9-.]+/?)* (HTTP/1.1){1}?'
 
-    print(f'message before split request: {httpdata["message"]["request"]}')
-    if verify_data(pattern, httpdata['message']['request']):
-        requestsplit = httpdata['message']['request'].split(' ')
+    if verify_data(pattern, message_tmp.request):
+        requestsplit = message_tmp.request.split(' ')
 
-        httpdata['request']['requesttype']['method'] = requestsplit[0]
-        httpdata['request']['requesttype']['resource'] = requestsplit[1]
-        httpdata['request']['requesttype']['version'] = requestsplit[2]
+        request.request_method = requestsplit[0]
+        request.request_resource = requestsplit[1]
+        request.request_version = requestsplit[2]
+
+        logging.debug(f"split_request() -> after split: {request}")
+    else:
+        message_tmp.error_code = 400
+        logging.debug("split_request() -> split failed - bad request?")
+        return
 
 
-def split_headers(httpdata: HttpData):
+def split_headers(message_tmp: MessageTmp, request: Request):
     """Split headers from the temporary ['message']['headers'] store and
     insert them sorted into ['request']['headers']."""
-    for header in httpdata['message']['headers']:
+    if message_tmp.error_code != 0:
+        logging.debug("split_headers() -> error code is set - skipping")
+        return
+
+    for header in message_tmp.headers:
         h = header.split(':')
-        kv = {
-            h[0].strip().lower(): h[1].strip().lower()
-        }
-        httpdata['request']['headers'].update(kv)
-        print(httpdata['request']['headers'])
+        try:
+            kv = {
+                h[0].strip().lower(): h[1].strip().lower()
+            }
+            request.headers.update(kv)
+        except IndexError:
+            message_tmp.error_code = 400
+            logging.debug("split_headers() -> split failed - bad request?")
+            return
+
+    logging.debug(f"split_headers() -> request.headers: {request.headers}")
 
 
-def split_message(message: str, httpdata: HttpData):
+def split_message(message: str, message_tmp: MessageTmp):
     """Split the received message in to 3 (expected) parts as a list:
     : 0 = Request
     : 1 = Headers
-    : 2 = Body
-    : No validation of the message content is done by this method."""
+    : 2 = Body"""
+    pattern = '^(.*\\r\\n)+'
+    if not verify_data(pattern, message):
+        logging.debug("Error: invalid raw message received")
+        message_tmp.error_code = 400
+        return
 
-    request = ''
-    headers = []
-    body = ''
+    m_split = message.split('\r\n')
 
-    # Get line with request method, resource and version.
-    # Expected to be the first line.
-    m1 = message.split('\r\n', 1)
-    print(f'm1: {m1}')
-    request = m1[0]
+    # Request
+    message_tmp.request = m_split.pop(0)
 
-    # Is there more than the request in the header?
-    if len(m1) == 2:
-        # Don't proceed if the second index is empty
-        if m1[1] != '':
-            # Is there a body in the header?
-            m2 = m1[1].rsplit('\r\n\r\n')
-            print(f'm2: {m2}')
-            if len(m2) == 2:
-                print(f'm2: {m2}')
-                body = m2[-1].strip()
+    # Headers and Body
+    body_found = 0
+    for h in m_split:
+        if h == '':
+            # Assume the next item is the body (and no more after that)
+            body_found = 1
+            continue
+        if body_found == 1:
+            message_tmp.body = h
+            break
+        message_tmp.headers.append(h)
 
-                # Are there headers as well?
-                m3 = m2[0].split('\r\n')
-                if m3[-1] == '':
-                    m3.pop()
-                print(f'm3a: {m3}')
-                headers = m3
-            else:
-                # If no body was found, expect the rest to be headers only
-                m3 = m2[0].split('\r\n')
-                if m3[-1] == '':
-                    m3.pop()
-                print(f'm3b: {m3}')
-                headers = m3
+    logging.debug(f"split_message() -> message_split: {message_tmp}")
 
-    httpdata['message']['request'] = request
-    httpdata['message']['headers'] = headers
-    httpdata['message']['body'] = body
-
-    print(httpdata['message'])
+    return message_tmp
 
 
 def handle_request(message: str) -> bytes:
     """Process the client request and create the response."""
-    httpdata = HttpData(
-        request=Request(
-            requesttype=RequestType(
-                method='',
-                resource='',
-                version=''
-            ),
-            headers={},
-            body=''
-        ),
-        response=Response(
-            headers={},
-            body='',
-            image=b'',
-            status_code=200
-        ),
-        message=Message(
-            request='',
-            headers=[],
-            body=''
-        )
-    )
+    # Read the request sent by the client
+    message_tmp = MessageTmp()
+    split_message(message, message_tmp)
+    request = Request()
+    split_request(message_tmp, request)
+    split_headers(message_tmp, request)
 
-    # read the request sent by the client
-    split_message(message, httpdata)
-    split_request(httpdata)
-    split_headers(httpdata)
+    # Create the response data based on the request received
+    response = Response(status_code=message_tmp.error_code)
+    load_response_data(request, response)
 
-    # create the response data based on the request received
-    router(httpdata)
+    # Create the response message (a byte encoded string) to send to the client
+    response_message = create_response(response)
 
-    # create the response string to send to the client
-    response = create_response(httpdata)
-
-    return response
+    return response_message

@@ -2,7 +2,7 @@ import socket
 import sys
 
 SERVER = '127.0.0.1'
-PORT = 5000
+PORT = 4000
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
