@@ -1,10 +1,10 @@
-# HTTP Server
+# HTTP Server Lab
 
 **What:** A study of HTTP/1.1 by implementing it as a simple server
 
 **Goal:** Serve a standard "GET / HTTP/1.1" request from Firefox and Chrome
 
-**Why and how:** Experiment to learn more about the transport (tcp) and application protocols (http) as it's so widely used today (and growing). I decided to approach this with a reverse engineering mindset while also looking at any protocol documentation that can be found. Using tools such as netcat/telnet, network trace (tcpdump/wireshark) and my own custom tcp client to create dummy requests during development leading up to the final goal.
+**Why and how:** Experiment to learn more about the transport (tcp) and application protocols (http) as it's so widely used today (and growing). I decided to approach this with a reverse engineering mindset while also looking at any protocol documentation that can be found. Using tools such as netcat/telnet, network trace (tcpdump/wireshark) and my own custom tcp client to create dummy requests during the development.
 
 * Learn about the HTTP protocol by implementing a simple HTTP server
 * Learn about concurrency (processes, threads, async)
@@ -17,7 +17,9 @@ Features to implement:
    - Persistence in each connection is expected by HTTP/1.1
  - [x] Serve a default "GET / HTTP/1.1" request from Firefox and Chrome
    - Make sure to add appropriate header information for the connection to persist until the client is satisfied.
-   - Respond only to the absolut minimum amount of request and header information. Just enough for the browser to be satisfied when browsing the url.
+   - Respond only to the absolut minimum amount of request and header information. Just enough for the browser to be satisfied when browsing the url. This includes serving a favicon as well.
+
+<br/>
 
 ![Flow](https://github.com/joellindberg/httpserver-lab/raw/main/diagrams/httpserver-lab.png)
 
@@ -28,20 +30,25 @@ Features to implement:
 
 The server listens on port 4000 by default. It has only been tested in WSL2 (Ubuntu 22.04.2) on Windows.
 
-~~~console
-$ python server.py
-~~~
+1. Start the server
+    ~~~console
+    $ python server.py
+    ~~~
 
-Cli args for custom port and debug.
+    Cli args for custom port and debug.
 
-~~~console
-$ python server.py -h
-~~~
+    ~~~console
+    $ python server.py -h
+    ~~~
+
+2. Start a browser (Firefox or Chrome) and enter url: http://localhost:4000
+
+You should be able to see a simple hello message from the server.
 
 <br />
 <br />
 
-## HTTP/1.1
+## HTTP/1.1 Implementation
 
 <br />
 
@@ -49,20 +56,20 @@ $ python server.py -h
 
 Requirements for the **TCP server** to fulfil in order to successfully serve a HTTP/1.1 request.
 
-1. Listen for and establish a TCP connection.<br />
+1. Listen for and establish a TCP connection. \
 The connection is handled at the transport layer (reference the TCP/IP and OSI model).
 
        Keep in mind that in HTTP 1.0 a new connection is opened for each HTTP request unless the client explicitly requests persistence by adding "Connection: keep-alive" in the request header. We will be implementing HTTP/1.1, which expects persistence by default, so we will not be checking for "Connection: keep-alive" in the header. Our program's default behaviour will be persistence but we will listen to "Connection: close" which will signal to close the connection.
        
        In versions newer than 1.1 persistence is also the default behavior. A more broad definition of this is behavior called multiplexing. 
 
-2. Handle the TCP connection in a persistent manner.<br />
-Handle each request/response pair concurrently.<br />
+2. Handle the TCP connection in a persistent manner. \
+Handle each request/response pair concurrently. \
 Header information is used to communicate when the exchange is complete and when the connection should be closed.
 
-3. Make sure the TCP connection is properly closed.<br />
-Give the client what it needs to be satisfied with the response so that it sends a FIN TCP flag when it's done. This can be done by making sure "Content-Length" is added to the response header.<br />
-Set a TCP timeout to ensure the resource is released if something goes wrong.<br />
+3. Make sure the TCP connection is properly closed. \
+Give the client what it needs to be satisfied with the response so that it sends a FIN TCP flag when it's done. This can be done by making sure "Content-Length" is added to the response header. \
+Set a TCP timeout to ensure the resource is released if something goes wrong. \
 
 <br />
 
@@ -76,9 +83,9 @@ Set a TCP timeout to ensure the resource is released if something goes wrong.<br
   - Add "Content-Length" to the response header to avoid having the client guessing or simply left in a state where it's waiting for more data which will leave the connection lingering.
   - If we need to explicitly signal to the client to disconnect we should add "Connection: close" in the header.
 * **Favicon:** To avoid a separate favicon being sent from Firefox and Chrome we need to inform the browser where the favicon can be found by linking it in the html in the GET / request.
-~~~html
-<head><link rel=\"icon\" sizes=\"16x16\" type=\"image/png\" href=\"favicon.png\"></head>
-~~~
+  ~~~html
+  <head><link rel=\"icon\" sizes=\"16x16\" type=\"image/png\" href=\"favicon.png\"></head>
+  ~~~
 * Persistence:
 In HTTP/1.0 a "Connection: Keep-alive" header needs to be sent by the client if it wants to persist the connection. Firefox is sending "Connection: keep-alive" which means that it wants to process more than one request/response pair in the same connection. Since we only serve HTTP/1.1 which implicity use persistence we don't need to act on this. We should still listen for "Connection: close" in the header though as this would indicate to stop the persistent mode for this connection and close the connection.
 
@@ -96,37 +103,32 @@ $ python3 -m pytest tests
 <br />
 <br />
 
-## Conclusions (notes to myself mostly)
+## HTTP/3
 
-HTTP/3 might be worth looking at later. It seems to be a promising successor to HTTP/1.1. Will probably skip any deep dives in HTTP/2 as I have not yet encountered any real cases for it yet (except for seeing some bigger sites using it). HTTP/3 is also multiplexed but with the difference from its predecessors that it's using a new protocol named QUIC which operates on top of UDP.
+HTTP/3 might be worth looking at later. It seems to be a promising successor to HTTP/1.1. While HTTP/2 seems to have been a good improvement over HTTP/1.1 I have not yet encountered it in a real life scenario where I had the need to dive deeper into it. HTTP/3 is multiplexed by default, just like HTTP/1.1 and HTTP/2, but with the major difference that it's using a new protocol named QUIC which operates on top of UDP.
 
 <br />
 <br />
 
 ## Resources
 
-TCP
+### TCP
 
-Python asyncio
+Python asyncio:
 * https://docs.python.org/3/library/asyncio-stream.html
 
-Python sockets
+Python sockets:
 * https://docs.python.org/3/library/socket.html
 
-Python linting
+Python linting:
 * https://flake8.pycqa.org/en/latest/
 
-Python timezone
-* https://stackoverflow.com/questions/4530069/how-do-i-get-a-value-of-datetime-today-in-python-that-is-timezone-aware
+Python date and timezone:
 * https://docs.python.org/3/library/zoneinfo.html
 * https://adamj.eu/tech/2021/05/06/how-to-list-all-timezones-in-python/
 
-Github actions
-* https://docs.github.com/en/actions/examples/using-scripts-to-test-your-code-on-a-runner
-* https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-* https://github.com/actions/runner-images
+### HTTP
 
-HTTP
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive
@@ -142,31 +144,30 @@ HTTP
 * https://tools.ietf.org/html/rfc7231
 * https://tools.ietf.org/html/rfc2616
 
-Favicon
+Favicon:
 * https://en.wikipedia.org/wiki/Favicon
 
-REGEX
+### REGEX
+
 * https://docs.microsoft.com/en-us/dotnet/api/system.text.regularexpressions.regex?view=net-6.0
 
-Testing
+### Testing
+
 Python testing using Github actions:
 * https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-Other tools/utilities
-tcpdump
+### Github actions
+
+* https://docs.github.com/en/actions/examples/using-scripts-to-test-your-code-on-a-runner
+* https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+* https://github.com/actions/runner-images
+
+### Debug/development tools/utilities
+
+#### tcpdump
+
 * https://www.redhat.com/sysadmin/tcpdump-part-3
 * https://www.tcpdump.org/manpages/tcpdump.1.html
-
-<br />
-<br />
-
-## Scrap notes
-
-Temporary notes that will be organized or removed as work progress.
-
-<br />
-
-### tcpdump
 
 Capture network traffic and display the data part in ASCII.
 ~~~bash
@@ -184,7 +185,7 @@ TCP flags:
 
 <br />
 
-### curl
+#### curl
 
 Useful verbose mode to see what it was missing. This helped giving a clue that Contant-Length need to be specified for the connection to be properly closed, unless close is sent of course.
 
